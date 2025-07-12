@@ -14,21 +14,30 @@ import (
 func Register(c *gin.Context) {
 	var req models.UserRegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
 		return
 	}
 
 	// Check if user already exists
 	var existingUser models.User
 	if err := database.DB.Where("email = ? OR phone = ?", req.Email, req.Phone).First(&existingUser).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "User with this email or phone already exists"})
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"message": "User with this email or phone already exists",
+		})
 		return
 	}
 
 	// Hash password
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to hash password",
+		})
 		return
 	}
 
@@ -43,14 +52,20 @@ func Register(c *gin.Context) {
 	}
 
 	if err := database.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to create user",
+		})
 		return
 	}
 
 	// Generate token
 	token, err := utils.GenerateToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to generate token",
+		})
 		return
 	}
 
@@ -66,6 +81,7 @@ func Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
 		"message": "User registered successfully",
 		"user":    userResponse,
 		"token":   token,
@@ -76,33 +92,48 @@ func Register(c *gin.Context) {
 func Login(c *gin.Context) {
 	var req models.UserLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
 		return
 	}
 
 	// Find user by email
 	var user models.User
 	if err := database.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Invalid credentials",
+		})
 		return
 	}
 
 	// Check if user is active
 	if !user.IsActive {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Account is deactivated"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Account is deactivated",
+		})
 		return
 	}
 
 	// Check password
 	if !utils.CheckPassword(req.Password, user.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Invalid credentials",
+		})
 		return
 	}
 
 	// Generate token
 	token, err := utils.GenerateToken(user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to generate token",
+		})
 		return
 	}
 
@@ -118,6 +149,7 @@ func Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"success": true,
 		"message": "Login successful",
 		"user":    userResponse,
 		"token":   token,
@@ -139,7 +171,10 @@ func GetProfile(c *gin.Context) {
 		CreatedAt: user.CreatedAt,
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user": userResponse})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"user":    userResponse,
+	})
 }
 
 // UpdateProfile updates the current user's profile
@@ -149,7 +184,10 @@ func UpdateProfile(c *gin.Context) {
 
 	var req models.UserUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
 		return
 	}
 
@@ -163,7 +201,10 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	if err := database.DB.Model(&models.User{}).Where("id = ?", currentUser.ID).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to update profile",
+		})
 		return
 	}
 
@@ -182,6 +223,7 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
+		"success": true,
 		"message": "Profile updated successfully",
 		"user":    userResponse,
 	})
