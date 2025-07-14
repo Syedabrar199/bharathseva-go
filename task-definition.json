@@ -1,0 +1,75 @@
+{
+  "family": "bharat-seva-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "bharat-seva-app",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/bharat-seva-space:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "DB_HOST",
+          "value": "YOUR_RDS_ENDPOINT"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "DB_USER",
+          "value": "postgres"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "value": "YourSecurePassword123!"
+        },
+        {
+          "name": "DB_NAME",
+          "value": "bharat_seva_space"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "your-super-secret-jwt-key-change-this-in-production"
+        },
+        {
+          "name": "JWT_EXPIRY",
+          "value": "24h"
+        },
+        {
+          "name": "PORT",
+          "value": "8080"
+        },
+        {
+          "name": "ENV",
+          "value": "production"
+        },
+        {
+          "name": "UPLOAD_PATH",
+          "value": "./uploads"
+        },
+        {
+          "name": "MAX_FILE_SIZE",
+          "value": "10485760"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/bharat-seva-task",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "essential": true
+    }
+  ]
+} 

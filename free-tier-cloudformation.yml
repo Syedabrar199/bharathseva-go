@@ -1,0 +1,358 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Bharat Seva Space - Free Tier Deployment'
+
+Parameters:
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Database admin password
+    MinLength: 8
+    MaxLength: 41
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+  
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type (Free Tier: t2.micro)
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+  
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: RDS instance class (Free Tier: db.t3.micro)
+    AllowedValues:
+      - db.t3.micro
+      - db.t2.micro
+
+Resources:
+  # VPC and Networking (FREE)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: BharatSevaVPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: BharatSevaPublicSubnet
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: 10.0.2.0/24
+      Tags:
+        - Key: Name
+          Value: BharatSevaPrivateSubnet
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: BharatSevaIGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: BharatSevaPublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Groups (FREE)
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EC2 instance
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: BharatSevaEC2SG
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: BharatSevaRDSSG
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ALB
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: BharatSevaALBSG
+
+  # RDS Database (FREE Tier)
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS
+      SubnetIds:
+        - !Ref PrivateSubnet
+        - !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: BharatSevaDBSubnetGroup
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: bharat-seva-db
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: postgres
+      EngineVersion: '15.4'
+      MasterUsername: postgres
+      MasterUserPassword: !Ref DBPassword
+      AllocatedStorage: '20'
+      StorageType: gp2
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+      PubliclyAccessible: false
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: BharatSevaDatabase
+
+  # EC2 Instance (FREE Tier)
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c02fb55956c7d316  # Amazon Linux 2023
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPair
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      SubnetId: !Ref PublicSubnet
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y docker
+          systemctl start docker
+          systemctl enable docker
+          usermod -a -G docker ec2-user
+          
+          # Install AWS CLI
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+          
+          # Login to ECR
+          aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com
+          
+          # Pull and run your application
+          docker pull ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/bharat-seva-space:latest
+          
+          # Create environment file
+          cat > /home/ec2-user/env.txt << EOF
+          DB_HOST=${Database.Endpoint.Address}
+          DB_PORT=5432
+          DB_USER=postgres
+          DB_PASSWORD=${DBPassword}
+          DB_NAME=bharat_seva_space
+          JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+          JWT_EXPIRY=24h
+          PORT=8080
+          ENV=production
+          UPLOAD_PATH=./uploads
+          MAX_FILE_SIZE=10485760
+          EOF
+          
+          # Run the application
+          docker run -d \
+            --name bharat-seva-app \
+            -p 8080:8080 \
+            --env-file /home/ec2-user/env.txt \
+            ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/bharat-seva-space:latest
+          
+          # Wait for database to be ready
+          sleep 60
+          
+          # Restart container to ensure database connection
+          docker restart bharat-seva-app
+          
+      Tags:
+        - Key: Name
+          Value: bharat-seva-app
+
+  # Key Pair (FREE)
+  KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: bharat-seva-key
+      Tags:
+        - Key: Name
+          Value: BharatSevaKeyPair
+
+  # IAM Role for EC2 (FREE)
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2Role
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Policies:
+        - PolicyName: BharatSevaEC2Policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerVersion
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: '*'
+
+  # Application Load Balancer (FREE for 12 months)
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: bharat-seva-alb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnet
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: BharatSevaALB
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: bharat-seva-tg
+      Port: 8080
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref VPC
+      Targets:
+        - Id: !Ref EC2Instance
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Tags:
+        - Key: Name
+          Value: BharatSevaTargetGroup
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+Outputs:
+  EC2PublicIP:
+    Description: EC2 Instance Public IP
+    Value: !GetAtt EC2Instance.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-EC2-PublicIP'
+
+  LoadBalancerDNS:
+    Description: Application Load Balancer DNS Name
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub '${AWS::StackName}-ALB-DNS'
+
+  DatabaseEndpoint:
+    Description: RDS Database Endpoint
+    Value: !GetAtt Database.Endpoint.Address
+    Export:
+      Name: !Sub '${AWS::StackName}-Database-Endpoint'
+
+  KeyPairName:
+    Description: EC2 Key Pair Name
+    Value: !Ref KeyPair
+    Export:
+      Name: !Sub '${AWS::StackName}-KeyPair-Name' 
