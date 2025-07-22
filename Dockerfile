@@ -32,6 +32,9 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/main .
 
+# Copy the config.env file from builder stage
+COPY --from=builder /app/config.env .
+
 # Make the binary executable
 RUN chmod +x main
 
@@ -46,4 +49,4 @@ USER appuser
 EXPOSE 8080
 
 # Run the application
-CMD ["./main"] 
+CMD ["./main"]
