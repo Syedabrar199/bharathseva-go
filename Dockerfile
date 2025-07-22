@@ -32,7 +32,7 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/main .
 
-# Copy the config.env file from builder stage
+# ✅ Copy config.env from builder stage
 COPY --from=builder /app/config.env .
 
 # Make the binary executable
