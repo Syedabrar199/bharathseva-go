@@ -5,23 +5,12 @@ services:
     build: .
     ports:
       - "8080:8080"
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=Online@123
-      - DB_NAME=bharat_seva_space
-      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-      - JWT_EXPIRY=24h
-      - PORT=8080
-      - ENV=production
-      - UPLOAD_PATH=./uploads
-      - MAX_FILE_SIZE=10485760
     depends_on:
       - postgres
     volumes:
-      - ./uploads:/root/uploads
-      - ./config.env:/root/config.env
+      - ./uploads:/root/uploads  # only mount uploads
+    networks:
+      - app-network
 
   postgres:
     image: postgres:15
@@ -33,6 +22,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
 
 volumes:
-  postgres_data: 
+  postgres_data:
+
+networks:
+  app-network:
